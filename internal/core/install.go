@@ -1,0 +1,124 @@
+package core
+
+import (
+	"context"
+	"fmt"
+	"rhel-drivers/internal/api"
+	"rhel-drivers/internal/log"
+)
+
+func Install(ctx context.Context, deps api.CoreDeps, opts api.InstallOptions, drivers []string) error {
+
+	log.Debugf("options: AutoDetect=%v DryRun=%v Force=%v", opts.AutoDetect, opts.DryRun, opts.Force)
+	log.Debugf("arguments: %v", drivers)
+
+	if len(drivers) == 0 && !opts.AutoDetect {
+		return fmt.Errorf("not specified what to install")
+	}
+	if len(drivers) > 0 && opts.AutoDetect {
+		return fmt.Errorf("both auto-detect and explicit drivers specified")
+	}
+
+	var toInstall []api.DriverID
+
+	if opts.AutoDetect {
+		hardwareDetected := false
+		for _, provider := range deps.Providers {
+			detected, err := provider.DetectHardware(ctx)
+			if err != nil {
+				log.Warnf("hardware detection failed for %s failed: %v", provider.GetName(), err)
+				continue
+			}
+			if detected {
+				hardwareDetected = true
+				log.Logf("detected %s hardware", provider.GetName())
+				available, err := provider.ListAvailable(ctx)
+				if err != nil {
+					return fmt.Errorf("failed to list available %s drivers: %w", provider.GetName(), err)
+				}
+				if len(available) > 0 {
+					toInstall = append(toInstall, available[0])
+				}
+			}
+		}
+		if !hardwareDetected {
+			return fmt.Errorf("no compatible hardware found")
+		}
+		if len(toInstall) == 0 {
+			return fmt.Errorf("no drivers available for detected hardware")
+		}
+	} else {
+	outer:
+		for _, driverStr := range drivers {
+			driver, err := parseDriverID(driverStr)
+			if err != nil {
+				return fmt.Errorf("invalid driver ID %q: %w", driverStr, err)
+			}
+			for _, provider := range deps.Providers {
+				if driver.ProviderID == provider.GetID() {
+					available, err := provider.ListAvailable(ctx)
+					if err != nil {
+						return fmt.Errorf("failed to list available %s drivers: %w", provider.GetName(), err)
+					}
+					for _, avail := range available {
+						if avail.Version == driver.Version {
+							if !opts.Force {
+								compat, err := provider.DetectHardware(ctx)
+								if err != nil {
+									log.Warnf("hardware detection failed for %s failed: %v", provider.GetName(), err)
+								} else if !compat {
+									return fmt.Errorf("no compatible %s hardware found", provider.GetName())
+								} else {
+									log.Infof("compatible hardware %s found", provider.GetName())
+								}
+							} else {
+								log.Infof("not checking for %s hardware compatibility in force mode", provider.GetName())
+							}
+							toInstall = append(toInstall, driver)
+							continue outer
+						}
+					}
+					return fmt.Errorf("%s driver version %s is NOT available", provider.GetName(), driver.Version)
+				}
+			}
+			return fmt.Errorf("unknown provider for driver: %s", driver)
+		}
+	}
+
+	if deps.RepoVerifier == nil {
+		return fmt.Errorf("no RepoVerifier provided")
+	}
+	if err := deps.RepoVerifier.VerifyAndEnable(ctx); err != nil {
+		return fmt.Errorf("failed to verify/enable repositories: %w", err)
+	}
+
+	var allPkgs []string
+	for _, provider := range deps.Providers {
+		provID := provider.GetID()
+		var provToInstall []api.DriverID
+		for _, driver := range toInstall {
+			if driver.ProviderID == provID {
+				provToInstall = append(provToInstall, driver)
+			}
+		}
+		if len(provToInstall) != 0 {
+			pkgs, err := provider.Install(ctx, provToInstall)
+			if err != nil {
+				return fmt.Errorf("failed to install %s drivers: %w", provider.GetName(), err)
+			}
+			allPkgs = append(allPkgs, pkgs...)
+		}
+	}
+
+	if len(allPkgs) == 0 {
+		return fmt.Errorf("nothing to install")
+	}
+	for _, pkg := range allPkgs {
+		log.Logf("package will be installed: %v", pkg)
+	}
+	if err := deps.PM.Install(ctx, allPkgs, opts); err != nil {
+		return fmt.Errorf("failed to install pacakges: %w", err)
+	}
+
+	return nil
+}

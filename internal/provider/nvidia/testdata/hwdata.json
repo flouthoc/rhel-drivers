@@ -1,0 +1,41 @@
+{
+  "chips": [
+    {
+      "devid": "0x0020",
+      "name": "RIVA TNT",
+      "legacybranch": "71.86.xx",
+      "features": []
+    },
+    {
+      "devid": "0x20F1",
+      "subdevid": "0x145F",
+      "subvendorid": "0x10DE",
+      "name": "NVIDIA A100-PCIE-40GB",
+      "features": [
+        "dpycbcr420",
+        "dpgsynccompatible",
+        "hdmi4k60rgb444",
+        "hdmigsynccompatible",
+        "runtimepm",
+        "vdpaufeaturesetJ",
+        "kernelopen",
+        "gsp_proprietary_supported"
+      ]
+    },
+    {
+      "devid": "0x31C2",
+      "subdevid": "0x21F1",
+      "subvendorid": "0x10DE",
+      "name": "NVIDIA GB300",
+      "features": [
+        "dpycbcr420",
+        "dpgsynccompatible",
+        "hdmi4k60rgb444",
+        "hdmigsynccompatible",
+        "runtimepm",
+        "vdpaufeaturesetK",
+        "kernelopen"
+      ]
+    }
+  ]
+}
