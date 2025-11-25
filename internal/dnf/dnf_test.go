@@ -25,86 +25,87 @@ func assertTwoPackagesAntBash(out []api.PackageInfo, t *testing.T) {
 
 func TestDnf(t *testing.T) {
 	var pm pkgMgr
-	dnfBin := "mydnf"
+	const dnfBin = "mydnf"
 	var mockExec *mocks.MockExecutor
-	expectDnfCall := func(args []string, err error) {
-		mockExec.EXPECT().Run(dnfBin, args).Return(err)
-	}
-	expectDnfCallCapture := func(args []string, err error, out []string) {
-		mockExec.EXPECT().RunCapture(dnfBin, args).Return(out, err)
-	}
-	expectRpmCallCapture := func(args []string, err error, out []string) {
-		mockExec.EXPECT().RunCapture("rpm", args).Return(out, err)
-	}
 	tests := []struct {
 		name      string
-		funcToRun func(t *testing.T) error
+		testFunc  func(t *testing.T) error
 		expectErr bool
 	}{
 		{
 			name: "InstallSuccess",
-			funcToRun: func(t *testing.T) error {
-				expectDnfCall([]string{"install", "foo", "bar"}, nil)
-				return pm.Install([]string{"foo", "bar"}, api.InstallOptions{DryRun: false})
+			testFunc: func(t *testing.T) error {
+				mockExec.EXPECT().
+					Run(dnfBin, []string{"install", "foo", "bar"}).
+					Return(nil)
+				return pm.Install([]string{"foo", "bar"}, api.InstallOptions{})
 			},
 		},
 		{
 			name: "InstallFailure",
-			funcToRun: func(t *testing.T) error {
-				expectDnfCall([]string{"install", "foo", "bar"}, fmt.Errorf("something went wrong"))
-				return pm.Install([]string{"foo", "bar"}, api.InstallOptions{DryRun: false})
+			testFunc: func(t *testing.T) error {
+				mockExec.EXPECT().
+					Run(dnfBin, []string{"install", "foo", "bar"}).
+					Return(fmt.Errorf("something went wrong"))
+				return pm.Install([]string{"foo", "bar"}, api.InstallOptions{})
 			},
 			expectErr: true,
 		},
 		{
 			name: "InstallNothing",
-			funcToRun: func(t *testing.T) error {
-				return pm.Install([]string{}, api.InstallOptions{DryRun: false})
+			testFunc: func(t *testing.T) error {
+				return pm.Install([]string{}, api.InstallOptions{})
 			},
 		},
 		{
 			name: "InstallDryRun",
-			funcToRun: func(t *testing.T) error {
+			testFunc: func(t *testing.T) error {
 				return pm.Install([]string{"foo", "bar"}, api.InstallOptions{DryRun: true})
 			},
 		},
 		{
 			name: "RemoveSuccess",
-			funcToRun: func(t *testing.T) error {
-				expectDnfCall([]string{"remove", "foo", "bar"}, nil)
-				return pm.Remove([]string{"foo", "bar"}, api.RemoveOptions{DryRun: false})
+			testFunc: func(t *testing.T) error {
+				mockExec.EXPECT().
+					Run(dnfBin, []string{"remove", "foo", "bar"}).
+					Return(nil)
+				return pm.Remove([]string{"foo", "bar"}, api.RemoveOptions{})
 			},
 		},
 		{
 			name: "RemoveFailure",
-			funcToRun: func(t *testing.T) error {
-				expectDnfCall([]string{"remove", "foo", "bar"}, fmt.Errorf("something went wrong"))
-				return pm.Remove([]string{"foo", "bar"}, api.RemoveOptions{DryRun: false})
+			testFunc: func(t *testing.T) error {
+				mockExec.EXPECT().
+					Run(dnfBin, []string{"remove", "foo", "bar"}).
+					Return(fmt.Errorf("something went wrong"))
+				return pm.Remove([]string{"foo", "bar"}, api.RemoveOptions{})
 			},
 			expectErr: true,
 		},
 		{
 			name: "RemoveNothing",
-			funcToRun: func(t *testing.T) error {
-				return pm.Remove([]string{}, api.RemoveOptions{DryRun: false})
+			testFunc: func(t *testing.T) error {
+				return pm.Remove([]string{}, api.RemoveOptions{})
 			},
 		},
 		{
 			name: "RemoveDryRun",
-			funcToRun: func(t *testing.T) error {
+			testFunc: func(t *testing.T) error {
 				return pm.Remove([]string{"foo", "bar"}, api.RemoveOptions{DryRun: true})
 			},
 		},
 		{
 			name: "ListAvailableFailure",
-			funcToRun: func(t *testing.T) error {
-				expectDnfCallCapture([]string{
-					"-q", "repoquery", "--qf",
-					"QQQ|%{name}|%{epoch}|%{version}|%{release}|%{arch}|%{sourcerpm}|%{repoid}|YYY\n",
-				}, fmt.Errorf("fatal error"), []string{
-					"QQQ|ant-junit|0|1.10.15|32.fc43|noarch|ant-1.10.15-32.fc43.src.rpm|updates-testing|YYY",
-					"oh well...",
-				})
+			testFunc: func(t *testing.T) error {
+				mockExec.EXPECT().
+					RunCapture(dnfBin, []string{
+						"-q", "repoquery", "--qf",
+						"QQQ|%{name}|%{epoch}|%{version}|%{release}|%{arch}|%{sourcerpm}|%{repoid}|YYY\n",
+					}).
+					Return([]string{
+						"QQQ|ant-junit|0|1.10.15|32.fc43|noarch|ant-1.10.15-32.fc43.src.rpm|updates-testing|YYY",
+						"oh well...",
+					}, fmt.Errorf("fatal error"))
 				out, err := pm.ListAvailablePackages()
 				if len(out) != 0 {
 					t.Errorf("Expected exactly 0 packages, got %d", len(out))
@@ -115,16 +116,18 @@ func TestDnf(t *testing.T) {
 		},
 		{
 			name: "ListAvailableSuccess",
-			funcToRun: func(t *testing.T) error {
-				expectDnfCallCapture([]string{
-					"-q", "repoquery", "--qf",
-					"QQQ|%{name}|%{epoch}|%{version}|%{release}|%{arch}|%{sourcerpm}|%{repoid}|YYY\n",
-				}, nil, []string{
-					"QQQ|ant-junit|0|1.10.15|32.fc43|noarch|ant-1.10.15-32.fc43.src.rpm|updates-testing|YYY",
-					"some trash",
-					"QQQ|f|o|o|YYY",
-					"QQQ|bash|0|5.3.0|2.fc43|x86_64|bash-5.3.0-2.fc43.src.rpm|fedora|YYY",
-				})
+			testFunc: func(t *testing.T) error {
+				mockExec.EXPECT().
+					RunCapture(dnfBin, []string{
+						"-q", "repoquery", "--qf",
+						"QQQ|%{name}|%{epoch}|%{version}|%{release}|%{arch}|%{sourcerpm}|%{repoid}|YYY\n",
+					}).
+					Return([]string{
+						"QQQ|ant-junit|0|1.10.15|32.fc43|noarch|ant-1.10.15-32.fc43.src.rpm|updates-testing|YYY",
+						"some trash",
+						"QQQ|f|o|o|YYY",
+						"QQQ|bash|0|5.3.0|2.fc43|x86_64|bash-5.3.0-2.fc43.src.rpm|fedora|YYY",
+					}, nil)
 				out, err := pm.ListAvailablePackages()
 				assertTwoPackagesAntBash(out, t)
 				return err
@@ -132,7 +135,7 @@ func TestDnf(t *testing.T) {
 		},
 		{
 			name: "ListAvailableCached",
-			funcToRun: func(t *testing.T) error {
+			testFunc: func(t *testing.T) error {
 				out, err := pm.ListAvailablePackages()
 				assertTwoPackagesAntBash(out, t)
 				return err
@@ -140,14 +143,16 @@ func TestDnf(t *testing.T) {
 		},
 		{
 			name: "ListInstalledFailure",
-			funcToRun: func(t *testing.T) error {
-				expectRpmCallCapture([]string{
-					"-qa", "--qf",
-					"QQQ|%|NAME?{%{NAME}}||%|EPOCH?{%{EPOCH}}||%|VERSION?{%{VERSION}}||%|RELEASE?{%{RELEASE}}||%|ARCH?{%{ARCH}}||%|SOURCERPM?{%{SOURCERPM}}|||YYY\n",
-				}, fmt.Errorf("fatal error"), []string{
-					"QQQ|ant-junit|0|1.10.15|32.fc43|noarch|ant-1.10.15-32.fc43.src.rpm||YYY",
-					"oh well...",
-				})
+			testFunc: func(t *testing.T) error {
+				mockExec.EXPECT().
+					RunCapture("rpm", []string{
+						"-qa", "--qf",
+						"QQQ|%|NAME?{%{NAME}}||%|EPOCH?{%{EPOCH}}||%|VERSION?{%{VERSION}}||%|RELEASE?{%{RELEASE}}||%|ARCH?{%{ARCH}}||%|SOURCERPM?{%{SOURCERPM}}|||YYY\n",
+					}).
+					Return([]string{
+						"QQQ|ant-junit|0|1.10.15|32.fc43|noarch|ant-1.10.15-32.fc43.src.rpm||YYY",
+						"oh well...",
+					}, fmt.Errorf("fatal error"))
 				out, err := pm.ListInstalledPackages()
 				if len(out) != 0 {
 					t.Errorf("Expected exactly 0 packages, got %d", len(out))
@@ -158,16 +163,18 @@ func TestDnf(t *testing.T) {
 		},
 		{
 			name: "ListInstalledSuccess",
-			funcToRun: func(t *testing.T) error {
-				expectRpmCallCapture([]string{
-					"-qa", "--qf",
-					"QQQ|%|NAME?{%{NAME}}||%|EPOCH?{%{EPOCH}}||%|VERSION?{%{VERSION}}||%|RELEASE?{%{RELEASE}}||%|ARCH?{%{ARCH}}||%|SOURCERPM?{%{SOURCERPM}}|||YYY\n",
-				}, nil, []string{
-					"QQQ|ant-junit|0|1.10.15|32.fc43|noarch|ant-1.10.15-32.fc43.src.rpm||YYY",
-					"some trash",
-					"QQQ|f|o|o|YYY",
-					"QQQ|bash|0|5.3.0|2.fc43|x86_64|bash-5.3.0-2.fc43.src.rpm||YYY",
-				})
+			testFunc: func(t *testing.T) error {
+				mockExec.EXPECT().
+					RunCapture("rpm", []string{
+						"-qa", "--qf",
+						"QQQ|%|NAME?{%{NAME}}||%|EPOCH?{%{EPOCH}}||%|VERSION?{%{VERSION}}||%|RELEASE?{%{RELEASE}}||%|ARCH?{%{ARCH}}||%|SOURCERPM?{%{SOURCERPM}}|||YYY\n",
+					}).
+					Return([]string{
+						"QQQ|ant-junit|0|1.10.15|32.fc43|noarch|ant-1.10.15-32.fc43.src.rpm||YYY",
+						"some trash",
+						"QQQ|f|o|o|YYY",
+						"QQQ|bash|0|5.3.0|2.fc43|x86_64|bash-5.3.0-2.fc43.src.rpm||YYY",
+					}, nil)
 				out, err := pm.ListInstalledPackages()
 				assertTwoPackagesAntBash(out, t)
 				return err
@@ -175,7 +182,7 @@ func TestDnf(t *testing.T) {
 		},
 		{
 			name: "ListInstalledCached",
-			funcToRun: func(t *testing.T) error {
+			testFunc: func(t *testing.T) error {
 				out, err := pm.ListInstalledPackages()
 				assertTwoPackagesAntBash(out, t)
 				return err
@@ -190,7 +197,7 @@ func TestDnf(t *testing.T) {
 				bin:  dnfBin,
 				exec: mockExec,
 			}
-			err := tt.funcToRun(t)
+			err := tt.testFunc(t)
 			if (err != nil) != tt.expectErr {
 				t.Errorf("Expected error: %v, but got: %v", tt.expectErr, err)
 			}
